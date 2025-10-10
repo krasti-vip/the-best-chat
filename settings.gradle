@@ -1,0 +1,11 @@
+pluginManagement {
+    repositories {
+        maven { url = 'https://repo.spring.io/snapshot' }
+        gradlePluginPortal()
+    }
+}
+rootProject.name = 'the-best-chat'
+
+include 'core'
+include 'client-pasha'
+include 'client-dima'

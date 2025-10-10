@@ -1,0 +1,18 @@
+plugins {
+    id 'java-library'
+}
+
+group = 'ru.test.the.best.chat'
+version = '0.0.1-SNAPSHOT'
+description = 'the-best-chat'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(24)
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://repo.spring.io/snapshot' }
+}

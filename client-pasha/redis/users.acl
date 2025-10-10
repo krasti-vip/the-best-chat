@@ -1,0 +1,2 @@
+user default on >12345678  ~* +@all
+user myUser on >12345678 ~* +@all
