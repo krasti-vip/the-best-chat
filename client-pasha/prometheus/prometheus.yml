@@ -1,0 +1,39 @@
+# ==================== GLOBAL CONFIGURATION ====================
+global:
+  # Интервал сбора метрик
+  # Почему 15s? Стандартное значение, баланс между нагрузкой и актуальностью
+  # Можно уменьшить до 5s для более частого мониторинга
+  scrape_interval: 15s
+
+  # Таймаут для scrape запросов
+  # Почему 10s? Должен быть меньше scrape_interval
+  scrape_timeout: 10s
+
+  # Интервал оценки правил алертинга
+  evaluation_interval: 15s
+
+# ==================== SCRAPE CONFIGS ====================
+scrape_configs:
+  # JOB 1: Сам Prometheus (self-monitoring)
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # JOB 2: Spring Boot приложение
+  - job_name: 'the-best-chat'
+    # Путь к endpoint с метриками
+    # Spring Boot Actuator экспонирует метрики на /actuator/prometheus
+    metrics_path: '/actuator/prometheus'
+
+    # Интервал сбора для этого job (переопределяет global)
+    scrape_interval: 5s
+
+    # Статическая конфигурация targets
+    static_configs:
+      # the-best-chat:8080 - имя контейнера и порт
+      # Docker DNS автоматически резолвит имя контейнера в IP
+      - targets: ['the-best-chat:8080']
+        # Дополнительные labels для идентификации
+        labels:
+          application: 'the-best-chat'
+          environment: 'docker'
