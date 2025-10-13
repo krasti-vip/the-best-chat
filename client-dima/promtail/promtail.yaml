@@ -1,0 +1,439 @@
+# ==================== SERVER CONFIGURATION ====================
+# Настройки HTTP/gRPC сервера Promtail для метрик и API
+server:
+  # IP адрес для HTTP сервера
+  # 0.0.0.0 - слушать на всех сетевых интерфейсах
+  # Почему? Доступ к метрикам из других контейнеров (например, Prometheus)
+  # Альтернатива: 127.0.0.1 (только localhost, не подходит для Docker)
+  http_listen_address: 0.0.0.0
+
+  # HTTP порт для метрик и API
+  # Стандартный порт Promtail: 9080
+  # Метрики доступны на: http://promtail:9080/metrics
+  # Альтернативы: 3200, 9081 (если 9080 занят)
+  http_listen_port: 9080
+
+  # gRPC порт
+  # 0 = отключить gRPC сервер
+  # Почему отключен? Не используется в нашей архитектуре
+  # Когда включать? Если Promtail работает как proxy между другими Promtail
+  grpc_listen_port: 0
+
+# ==================== POSITIONS ====================
+# Файл позиций - где Promtail запоминает, до какой строки прочитал каждый лог-файл
+# Зачем? Чтобы после перезапуска не читать логи заново с начала
+positions:
+  # Путь к файлу позиций
+  # /tmp/positions.yaml - временная директория
+  #
+  # ⚠️ ВАЖНО для Production:
+  # Для production монтируйте volume, чтобы позиции сохранялись:
+  # volumes:
+  #   - promtail-positions:/tmp/promtail
+  # positions:
+  #   filename: /tmp/promtail/positions.yaml
+  #
+  # Почему важно? Если потеряете positions.yaml:
+  # - После перезапуска Promtail прочитает ВСЕ логи заново
+  # - Дубликаты в Loki
+  # - Лишняя нагрузка на систему
+  filename: /tmp/positions.yaml
+
+# ==================== CLIENTS (куда отправлять логи) ====================
+# Список Loki серверов для отправки логов
+# Можно указать несколько клиентов для репликации или разных tenant'ов
+clients:
+  # URL Loki push endpoint
+  # Формат: http://<host>:<port>/loki/api/v1/push
+  # loki - имя контейнера (Docker DNS автоматически резолвит в IP)
+  # 3100 - стандартный порт Loki
+  - url: http://loki:3131/loki/api/v1/push
+
+    # ==================== BATCHING (батчинг логов) ====================
+    # Время ожидания перед отправкой batch
+    # Почему 1s? Баланс между latency и эффективностью:
+    # - Меньше (100ms) = логи быстрее в Loki, но больше HTTP запросов
+    # - Больше (5s) = меньше запросов, но выше latency
+    # Best practice: 1s для production, 500ms для real-time логов
+    batchwait: 1s
+
+    # Максимальный размер batch в байтах
+    # 102400 байт = 100 KB
+    # Почему 100KB? Оптимальный размер для HTTP запроса:
+    # - Меньше (10KB) = слишком много маленьких запросов
+    # - Больше (1MB) = риск timeout при медленной сети
+    # Best practice: 100-500KB
+    # Если batch заполнен раньше batchwait → отправляется немедленно
+    batchsize: 102400
+
+    # ==================== NETWORK ====================
+    # Таймаут HTTP запроса к Loki
+    # Почему 10s? Loki может быть перегружен или медленно отвечать
+    # Если за 10 секунд нет ответа → считаем ошибкой и retry
+    # Best practice: 10-30s (зависит от сетевой задержки)
+    timeout: 10s
+
+    # ==================== ДОПОЛНИТЕЛЬНЫЕ ПАРАМЕТРЫ (опционально) ====================
+    # Раскомментируйте при необходимости:
+
+    # Минимальный backoff при ошибках (экспоненциальный рост)
+    # Если Loki недоступен → ждем 500ms, затем 1s, 2s, 4s и т.д. до max_backoff
+    # min_backoff: 500ms
+
+    # Максимальный backoff при ошибках
+    # Не ждать больше 5 минут между попытками
+    # max_backoff: 5m
+
+    # Максимум попыток отправки
+    # После N неудачных попыток → логи отбрасываются (считаются потерянными)
+    # max_retries: 10
+
+    # Tenant ID (для multi-tenancy Loki)
+    # Если auth_enabled: true в Loki → обязательно указать
+    # tenant_id: "tenant1"
+
+    # HTTP заголовки (опционально)
+    # headers:
+    #   X-Custom-Header: "value"
+
+# ==================== SCRAPE CONFIGS (откуда собирать логи) ====================
+# Список job'ов для сбора логов из разных источников
+scrape_configs:
+
+  # ┌─────────────────────────────────────────────────────────────────────┐
+  # │                  JOB 1: THE-BEST-CHAT (Spring Boot App)             │
+  # └─────────────────────────────────────────────────────────────────────┘
+  - job_name: the-best-chat
+
+    # ==================== DOCKER SERVICE DISCOVERY ====================
+    # Автоматическое обнаружение Docker контейнеров
+    # Promtail подключается к Docker API и получает список контейнеров
+    docker_sd_configs:
+      # Unix socket Docker daemon
+      # unix:///var/run/docker.sock - стандартный путь к Docker socket
+      # Почему socket? Быстрее и безопаснее, чем TCP
+      # Альтернатива: tcp://docker-host:2375 (remote Docker)
+      - host: unix:///var/run/docker.sock
+
+        # Как часто обновлять список контейнеров
+        # 5s - проверять каждые 5 секунд
+        # Почему 5s? Баланс между актуальностью и нагрузкой на Docker API:
+        # - Меньше (1s) = быстрое обнаружение новых контейнеров, но больше нагрузка
+        # - Больше (30s) = меньше нагрузка, но медленнее обнаружение
+        # Best practice: 5-10s для production
+        refresh_interval: 5s
+
+        # Фильтры Docker контейнеров
+        # Собираем логи ТОЛЬКО от контейнеров, удовлетворяющих условиям
+        filters:
+          # Фильтр по имени контейнера
+          # name: name - фильтровать по названию контейнера
+          # values: ["the-best-chat"] - только контейнер с именем "the-best-chat"
+          #
+          # Другие фильтры:
+          # - name: label
+          #   values: ["app=the-best-chat"]  # фильтр по Docker label
+          # - name: status
+          #   values: ["running"]  # только запущенные контейнеры
+          - name: name
+            values: ["the-best-chat"]
+
+    # ==================== RELABEL CONFIGS (преобразование labels) ====================
+    # Labels - метки для идентификации и фильтрации логов в Grafana
+    # Каждый лог будет иметь эти labels: {container="...", app="...", ...}
+    relabel_configs:
+
+      # Правило 1: Извлечь имя контейнера
+      # Docker добавляет префикс / к имени: /the-best-chat
+      # Regex /(.*) убирает слэш: the-best-chat
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container'
+        # Результат: container="the-best-chat"
+
+      # Правило 2: Короткий ID контейнера (первые 12 символов)
+      # Полный ID: abc123def456789...xyz (64 символа)
+      # Короткий: abc123def456 (12 символов, достаточно для идентификации)
+      # Зачем? Удобно для отладки (docker logs abc123def456)
+      - source_labels: ['__meta_docker_container_id']
+        regex: '(.{12}).*'
+        target_label: 'container_id'
+        # Результат: container_id="abc123def456"
+
+      # Правило 3: Статический label "app"
+      # replacement - просто подставляем значение
+      # Почему статический? Этот job только для the-best-chat
+      - replacement: 'the-best-chat'
+        target_label: 'app'
+        # Результат: app="the-best-chat"
+
+      # Правило 4: Окружение (environment)
+      # Полезно для разделения dev/staging/production логов
+      - replacement: 'docker'
+        target_label: 'environment'
+        # Результат: environment="docker"
+
+      # ==================== ДОПОЛНИТЕЛЬНЫЕ RELABELS (опционально) ====================
+      # Раскомментируйте при необходимости:
+
+      # Docker image
+      # - source_labels: ['__meta_docker_container_image']
+      #   target_label: 'image'
+      #   # Результат: image="the-best-chat:latest"
+
+      # Docker labels
+      # - source_labels: ['__meta_docker_container_label_com_example_version']
+      #   target_label: 'version'
+      #   # Результат: version="1.0.0"
+
+      # Network name
+      # - source_labels: ['__meta_docker_network_name']
+      #   target_label: 'network'
+      #   # Результат: network="app"
+
+    # ==================== PIPELINE STAGES (обработка логов) ====================
+    # Pipeline - последовательность шагов обработки каждой строки лога
+    # Каждая строка проходит через все stages по порядку
+    pipeline_stages:
+
+      # ==================== STAGE 1: JSON PARSING ====================
+      # Парсим JSON лог из Spring Boot (Logback LogstashEncoder)
+      # Входная строка: {"timestamp":"2025-10-06T17:00:00.123Z","level":"INFO",...}
+      # Результат: структура с полями timestamp, level, message и т.д.
+      - json:
+          # expressions - какие поля извлечь из JSON
+          # Формат: internal_name: json_field_path
+          expressions:
+            # Timestamp из поля "@timestamp" или "timestamp"
+            # Logback LogstashEncoder использует "@timestamp"
+            # Можно указать несколько вариантов: timestamp || "@timestamp"
+            timestamp: timestamp
+
+            # Уровень логирования: DEBUG, INFO, WARN, ERROR
+            # Используется для создания label {level="ERROR"}
+            level: level
+
+            # Имя логгера (класс)
+            # Пример: ru.test.thebestchat.service.UserService
+            # Полезно для фильтрации: {logger=~".*UserService"}
+            logger: logger_name
+
+            # Имя потока
+            # Пример: http-nio-8080-exec-1 (Spring MVC request thread)
+            # Полезно для отладки многопоточных приложений
+            thread: thread_name
+
+            # Само сообщение лога
+            # Это главное содержимое, которое отправляется в Loki
+            message: message
+
+            # Stack trace (если есть exception)
+            # Сохраняется отдельно для структурированного поиска
+            # Можно фильтровать: |= "NullPointerException"
+            stack_trace: stack_trace
+
+          # ==================== ДОПОЛНИТЕЛЬНЫЕ JSON ПОЛЯ (опционально) ====================
+          # Раскомментируйте при необходимости:
+
+          # MDC (Mapped Diagnostic Context) поля
+          # mdc_user_id: mdc.userId
+          # mdc_request_id: mdc.requestId
+
+          # Structured Arguments
+          # user_id: userId
+          # order_id: orderId
+
+      # ==================== STAGE 2: LABELS (создание labels из извлеченных полей) ====================
+      # Labels - ключ к эффективному поиску в Loki
+      # ВАЖНО: Не создавайте слишком много уникальных labels (high cardinality)!
+      #
+      # ✅ Хорошо: {level="ERROR", app="chat"} - мало уникальных комбинаций
+      # ❌ Плохо: {user_id="123", request_id="abc"} - миллионы комбинаций
+      #
+      # High cardinality labels = огромный индекс = медленный Loki
+      # Best practice: 10-100 уникальных комбинаций labels на job
+      - labels:
+          # Добавляем level как label
+          # Теперь можно фильтровать: {level="ERROR"}
+          level: level
+
+          # ==================== ДРУГИЕ LABELS (опционально) ====================
+          # Раскомментируйте ОСТОРОЖНО:
+
+          # Logger (если не слишком много разных)
+          # logger: logger
+          # Проблема: если 100+ логгеров → high cardinality
+
+          # Thread (НЕ рекомендуется!)
+          # thread: thread
+          # Проблема: каждый request = новый thread = миллионы уникальных labels
+
+      # ==================== STAGE 3: TIMESTAMP (использовать timestamp из лога) ====================
+      # По умолчанию Promtail использует время получения лога
+      # Но мы хотим использовать реальное время из приложения
+      - timestamp:
+          # source - откуда брать timestamp (из stage 1 json)
+          source: timestamp
+
+          # format - формат времени
+          # RFC3339Nano = 2025-10-06T17:00:00.123456789Z (ISO-8601 с наносекундами)
+          # Другие форматы:
+          # - RFC3339 = 2025-10-06T17:00:00Z (без миллисекунд)
+          # - Unix = 1696607400 (Unix timestamp)
+          # - UnixMs = 1696607400123 (Unix timestamp в миллисекундах)
+          format: RFC3339Nano
+
+      # ==================== STAGE 4: OUTPUT (что отправлять в Loki) ====================
+      # Определяем, какой текст сохранить как лог-строку в Loki
+      # Остальные поля (level, logger, thread) доступны в labels и metadata
+      - output:
+          # source - откуда брать текст (из stage 1 json)
+          source: message
+          # Альтернатива: комбинировать несколько полей
+          # source: "{{ .logger }}: {{ .message }}"
+
+      # ==================== ДОПОЛНИТЕЛЬНЫЕ STAGES (опционально) ====================
+      # Раскомментируйте при необходимости:
+
+      # STAGE: DROP (фильтрация логов)
+      # Не отправлять определенные логи в Loki (экономия места)
+      # - drop:
+      #     source: level
+      #     expression: "DEBUG"  # Не отправлять DEBUG логи
+      #     # Или regex:
+      #     # expression: "DEBUG|TRACE"
+
+      # STAGE: MATCH (условная обработка)
+      # Разная обработка для разных типов логов
+      # - match:
+      #     selector: '{level="ERROR"}'
+      #     stages:
+      #       - labels:
+      #           severity: "high"  # Добавить label только для ERROR
+
+      # STAGE: REGEX (извлечь данные из текста)
+      # Если логи не JSON, а текст
+      # - regex:
+      #     expression: '^(?P<time>\d+:\d+:\d+) (?P<level>\w+) (?P<msg>.*)$'
+
+      # STAGE: REPLACE (изменить текст лога)
+      # Заменить/удалить sensitive данные
+      # - replace:
+      #     expression: "password=\\w+"
+      #     replace: "password=***"  # Скрыть пароли
+
+  # ┌─────────────────────────────────────────────────────────────────────┐
+  # │                  JOB 2: POSTGRES (Database Logs)                    │
+  # └─────────────────────────────────────────────────────────────────────┘
+  - job_name: postgres
+
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        # Обновлять реже (10s), т.к. PostgreSQL редко перезапускается
+        refresh_interval: 10s
+        filters:
+          - name: name
+            values: ["postgres"]
+
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container'
+
+      - replacement: 'postgres'
+        target_label: 'app'
+
+      # Label "type" для группировки всех баз данных
+      # Теперь можно: {type="database"} → логи всех БД
+      - replacement: 'database'
+        target_label: 'type'
+
+    pipeline_stages:
+      # ==================== REGEX PARSING (PostgreSQL text logs) ====================
+      # PostgreSQL логи - обычный текст, не JSON
+      # Формат: 2025-10-06 14:18:40.153 UTC [101] LOG:  database system is ready
+      - regex:
+          # Named capture groups: (?P<name>pattern)
+          # \d{4}-\d{2}-\d{2} - дата (2025-10-06)
+          # \d{2}:\d{2}:\d{2}\.\d{3} - время (14:18:40.153)
+          # \w+ - timezone (UTC)
+          # \[(?P<pid>\d+)\] - process ID в квадратных скобках
+          # (?P<level>\w+) - уровень (LOG, ERROR, FATAL, WARNING)
+          # (?P<message>.*) - остальное сообщение
+          expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} \w+) \[(?P<pid>\d+)\] (?P<level>\w+):  (?P<message>.*)$'
+
+      - labels:
+          level: level
+
+      - timestamp:
+          source: timestamp
+          # Формат PostgreSQL: 2025-10-06 14:18:40.153 UTC
+          # Go time format: 2006-01-02 15:04:05.000 MST
+          # Почему 2006-01-02? Go использует эту дату как reference
+          format: '2006-01-02 15:04:05.000 MST'
+
+      # Output по умолчанию - вся строка лога
+      # Можно явно указать:
+#       - output:
+#           source: message
+
+  # ┌─────────────────────────────────────────────────────────────────────┐
+  # │                    JOB 3: REDIS (Cache Logs)                        │
+  # └─────────────────────────────────────────────────────────────────────┘
+  - job_name: redis
+
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 10s
+        filters:
+          - name: name
+            values: ["redis"]
+
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container'
+
+      - replacement: 'redis'
+        target_label: 'app'
+
+      - replacement: 'database'
+        target_label: 'type'
+
+    pipeline_stages:
+      # ==================== REGEX PARSING (Redis text logs) ====================
+      # Redis логи
+      # Формат: 1:M 06 Oct 2025 14:18:40.123 * Ready to accept connections
+      - regex:
+          # (?P<pid>\d+) - process ID (1)
+          # (?P<role>\w) - роль: M=master, S=slave, C=RDB/AOF child, X=Sentinel
+          # (?P<timestamp>\d{2} \w{3} \d{4} \d{2}:\d{2}:\d{2}\.\d{3}) - время
+          # (?P<level>.) - уровень: * notice, # warning, . verbose, - debug
+          # (?P<message>.*) - сообщение
+          expression: '^(?P<pid>\d+):(?P<role>\w) (?P<timestamp>\d{2} \w{3} \d{4} \d{2}:\d{2}:\d{2}\.\d{3}) (?P<level>.) (?P<message>.*)$'
+
+      - labels:
+          level: level
+          # Можно добавить роль (master/slave):
+          # role: role
+
+      - timestamp:
+          source: timestamp
+          # Формат Redis: 06 Oct 2025 14:18:40.123
+          # Go format: 02 Jan 2006 15:04:05.000
+          format: '02 Jan 2006 15:04:05.000'
+
+# ==================== ДОПОЛНИТЕЛЬНЫЕ СЕКЦИИ (опционально) ====================
+# Раскомментируйте при необходимости:
+
+# LIMITS (ограничения)
+# limits_config:
+#   # Максимальная скорость чтения логов (строк/сек)
+#   readline_rate: 10000
+#   # Максимальный размер burst (строк)
+#   readline_burst: 10000
+
+# TARGET MANAGER (управление targets)
+# target_config:
+#   # Период синхронизации targets
+#   sync_period: 10s

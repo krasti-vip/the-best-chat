@@ -1,4 +1,4 @@
-package ru.test.the.best.chat;
+package ru.test.the.best.chat.user;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

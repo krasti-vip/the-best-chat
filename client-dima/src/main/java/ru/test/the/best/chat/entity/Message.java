@@ -12,8 +12,6 @@ import ru.test.the.best.chat.model.dto.message.CreateMessageRequest;
 import ru.test.the.best.chat.model.dto.message.MessageResponse;
 
 import java.time.Instant;
-import java.util.Date;
-import java.util.Objects;
 import java.util.UUID;
 
 @Value
