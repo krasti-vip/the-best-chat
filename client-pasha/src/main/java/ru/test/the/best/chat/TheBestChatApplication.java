@@ -8,7 +8,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
-import ru.test.the.best.chat.gson.adapter.InstantTypeAdapter;
+import ru.test.the.best.chat.core.gson.adapter.InstantTypeAdapter;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -132,5 +132,4 @@ public class TheBestChatApplication {
 
         return new JedisPool(poolConfig, host, port, username, password);
     }
-
 }
