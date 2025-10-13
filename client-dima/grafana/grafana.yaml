@@ -1,0 +1,38 @@
+apiVersion: 1
+
+# ==================== DATASOURCES ====================
+datasources:
+  # Datasource Loki
+  - name: Loki
+    # Тип datasource
+    # Почему loki? Grafana поддерживает много типов: prometheus, elasticsearch и т.д.
+    type: loki
+
+    # Режим доступа
+    # proxy - Grafana делает запросы к Loki от своего имени
+    # direct - браузер делает запросы напрямую (не подходит для Docker)
+    # Почему proxy? Loki доступен только внутри Docker сети.
+    access: proxy
+
+    # URL Loki
+    # Почему http://loki:3100?
+    # - loki - имя контейнера
+    # - 3100 - порт Loki
+    url: http://loki:3131
+
+    # Datasource по умолчанию?
+    # Почему true? Чтобы при открытии Explore сразу выбирался Loki.
+    isDefault: true
+
+    # Можно редактировать в UI?
+    # Почему true? Для тестирования удобно менять настройки в Grafana UI.
+    # Production: false (настройки только через файл)
+    editable: true
+
+    # Дополнительные настройки JSON
+    jsonData:
+      # Максимум строк в ответе
+      # Почему 1000? Баланс между производительностью и полнотой данных.
+      # Если логов > 1000 → покажет первые 1000.
+      # Можно увеличить в UI если нужно больше.
+      maxLines: 1000
