@@ -1,0 +1,3 @@
+user default on >12345678  ~* +@all
+user myDima on >12345678 ~* +@all
+user myPasha on >12345678 ~* +@all
