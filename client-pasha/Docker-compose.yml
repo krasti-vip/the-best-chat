@@ -57,11 +57,7 @@ services:
   # ==================== THE-BEST-CHAT (наше приложение) ====================
   the-best-chat:
     # Собрать образ из Dockerfile
-    build:
-      # Контекст сборки (корень проекта)
-      context: .
-      # Путь к Dockerfile
-      dockerfile: Dockerfile
+    image: chat-backend-1
 
     # Имя контейнера
     # Почему важно? По этому имени будет фильтровать Promtail.
@@ -109,6 +105,56 @@ services:
 
     # Логирование (используем якорь)
     logging: *default-logging  # *default-logging - ссылка на якорь
+
+
+  the-best-chat-2:
+    # Собрать образ из Dockerfile
+    image: chat-backend-2
+
+    # Имя контейнера
+    # Почему важно? По этому имени будет фильтровать Promtail.
+    container_name: the-best-chat-2
+
+    # Переменные окружения
+    environment:
+      # Spring профиль
+      # Почему docker? Чтобы использовать JSON логи (см. logback-spring.xml)
+      SPRING_PROFILES_ACTIVE: docker
+
+      # PostgreSQL
+      # jdbc:postgresql://postgres:5432/postgres
+      # postgres - имя контейнера (Docker DNS)
+      # 5432 - порт PostgreSQL
+      # postgres - имя базы данных
+      POSTGRES_JDBC_URL: jdbc:postgresql://postgres:5432/postgres
+      POSTGRES_USER: admin123
+      POSTGRES_PASSWORD: admin123
+
+      # Redis
+      REDIS_HOST: redis  # имя контейнера
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: 12345678
+      REDIS_USER: myUser
+
+    ports:
+      - "8081:8081"
+
+    # Зависимости (запускаться после этих сервисов)
+    depends_on:
+      # Ждать пока postgres станет healthy
+      postgres:
+        condition: service_healthy
+      # Redis без condition (запустится просто)
+      redis:
+        condition: service_started
+
+    # Сеть
+    networks:
+      - app
+
+    # Логирование (используем якорь)
+    logging: *default-logging  # *default-logging - ссылка на якорь
+
 
   # ==================== POSTGRES ====================
   postgres:
@@ -358,3 +404,23 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  front:
+    image: chat-frontend-1:latest
+    ports:
+      - "8090:80"
+    networks:
+      - app
+    depends_on:
+      the-best-chat:
+        condition: service_started
+
+  front-2:
+    image: chat-frontend-1:latest
+    ports:
+      - "8091:80"
+    networks:
+      - app
+    depends_on:
+      the-best-chat:
+        condition: service_started
