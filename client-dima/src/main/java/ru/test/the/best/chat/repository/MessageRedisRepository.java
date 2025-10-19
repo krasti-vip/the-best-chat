@@ -497,6 +497,7 @@ public class MessageRedisRepository implements RepositoryMessage<Message, UUID> 
      */
     private List<Message> getMessagesByIds(final Jedis jedis, final Set<String> messageIds) {
         if (messageIds.isEmpty()) {
+
             return Collections.emptyList();
         }
 
