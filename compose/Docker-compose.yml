@@ -38,7 +38,7 @@ volumes:
   # Volume сохраняет данные на хосте.
 
   # Volume для PostgreSQL
-  postgres-data-new:
+  postgres-data-new2:
 
   # Volume для pgAdmin
   pgadmin-data:
@@ -54,18 +54,15 @@ volumes:
 # ==================== SERVICES ====================
 services:
 
-  # ==================== THE-BEST-CHAT МОДУЛЬ Dima ====================
-  the-best-chat-dima:
+  # ==================== THE-BEST-CHAT (наше приложение) ====================
+  the-best-chat:
     # Собрать образ из Dockerfile
-    build:
-      # Контекст сборки (корень проекта)
-      context: ../client-dima
-      # Путь к Dockerfile
-      dockerfile: Dockerfile
+    build: ../client-dima
+    image: chat-backend-1
 
     # Имя контейнера
     # Почему важно? По этому имени будет фильтровать Promtail.
-    container_name: the-best-chat-dima
+    container_name: the-best-chat
 
     # Переменные окружения
     environment:
@@ -79,20 +76,20 @@ services:
       # 5432 - порт PostgreSQL
       # postgres - имя базы данных
       POSTGRES_JDBC_URL: jdbc:postgresql://postgres:5432/postgres
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: admin123
+      POSTGRES_PASSWORD: admin123
 
       # Redis
-      REDIS_HOST: ${REDIS_HOST}   # имя контейнера
-      REDIS_PORT: ${REDIS_PORT}
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-      REDIS_USER: myDima
+      REDIS_HOST: redis  # имя контейнера
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: 12345678
+      REDIS_USER: myUser
 
     # Порты
     # "8080:8080" - хост:контейнер
     # Почему 8080? Стандартный порт Spring Boot.
     ports:
-      - "8081:8080"
+      - "8080:8080"
 
     # Зависимости (запускаться после этих сервисов)
     depends_on:
@@ -110,18 +107,15 @@ services:
     # Логирование (используем якорь)
     logging: *default-logging  # *default-logging - ссылка на якорь
 
-  # ==================== THE-BEST-CHAT МОДУЛЬ Pasha ====================
-  the-best-chat-pasha:
+
+  the-best-chat-2:
     # Собрать образ из Dockerfile
-    build:
-      # Контекст сборки (корень проекта)
-      context: ../client-pasha
-      # Путь к Dockerfile
-      dockerfile: Dockerfile
+    build: ../client-pasha
+    image: chat-backend-2
 
     # Имя контейнера
     # Почему важно? По этому имени будет фильтровать Promtail.
-    container_name: the-best-chat-pasha
+    container_name: the-best-chat-2
 
     # Переменные окружения
     environment:
@@ -135,20 +129,17 @@ services:
       # 5432 - порт PostgreSQL
       # postgres - имя базы данных
       POSTGRES_JDBC_URL: jdbc:postgresql://postgres:5432/postgres
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: admin123
+      POSTGRES_PASSWORD: admin123
 
       # Redis
-      REDIS_HOST: ${REDIS_HOST}   # имя контейнера
-      REDIS_PORT: ${REDIS_PORT}
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-      REDIS_USER: myPasha
+      REDIS_HOST: redis  # имя контейнера
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: 12345678
+      REDIS_USER: myUser
 
-    # Порты
-    # "8080:8080" - хост:контейнер
-    # Почему 8080? Стандартный порт Spring Boot.
     ports:
-      - "8082:8080"
+      - "8081:8081"
 
     # Зависимости (запускаться после этих сервисов)
     depends_on:
@@ -165,6 +156,7 @@ services:
 
     # Логирование (используем якорь)
     logging: *default-logging  # *default-logging - ссылка на якорь
+
 
   # ==================== POSTGRES ====================
   postgres:
@@ -175,9 +167,9 @@ services:
 
     environment:
       # Пользователь PostgreSQL
-      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_USER: admin123
       # Пароль
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: admin123
       # База данных (создается автоматически)
       POSTGRES_DB: postgres
       # Директория для данных внутри контейнера
@@ -188,13 +180,13 @@ services:
     # postgres-data - имя volume (создан выше)
     # /data/postgres - путь внутри контейнера
     volumes:
-      - postgres-data-new:/data/postgres
+      - postgres-data-new2:/data/postgres
 
     # Порты
     # "4444:5432" - на хосте 4444, внутри контейнера 5432
     # Почему 4444? Чтобы не конфликтовать с локальным PostgreSQL на 5432.
     ports:
-      - "5432:5432"
+      - "4444:5432"
 
     networks:
       - app
@@ -202,7 +194,7 @@ services:
     logging: *default-logging
 
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d postgres" ]
+      test: [ "CMD-SHELL", "pg_isready -U admin123 -d postgres" ]
       # -d postgres - явно указываем имя базы данных
       interval: 10s
       timeout: 5s
@@ -216,9 +208,9 @@ services:
 
     environment:
       # Email для входа в pgAdmin
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_EMAIL: admin@admin.example
       # Пароль для входа
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_DEFAULT_PASSWORD: admin
       # Режим сервера (False = desktop mode, проще для тестов)
       PGADMIN_CONFIG_SERVER_MODE: 'False'
 
@@ -260,12 +252,6 @@ services:
       - app
 
     logging: *default-logging
-
-    healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
-      interval: 10s
-      timeout: 3s
-      retries: 5
 
   # ==================== LOKI ====================
   loki:
@@ -412,9 +398,7 @@ services:
     networks:
       - app
     depends_on:
-      the-best-chat-dima:
-        condition: service_started
-      the-best-chat-pasha:
+      the-best-chat:
         condition: service_started
     logging: *default-logging
     healthcheck:
@@ -422,3 +406,25 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  front:
+    build: ../client-dima/front
+    image: chat-frontend-1:latest
+    ports:
+      - "8090:80"
+    networks:
+      - app
+    depends_on:
+      the-best-chat:
+        condition: service_started
+
+  front-2:
+    build: ../client-pasha/front
+    image: chat-frontend-2:latest
+    ports:
+      - "8091:80"
+    networks:
+      - app
+    depends_on:
+      the-best-chat:
+        condition: service_started

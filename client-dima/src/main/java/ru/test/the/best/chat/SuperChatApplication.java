@@ -8,7 +8,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
-import ru.test.the.best.chat.config.InstantTypeAdapter;
+import ru.test.the.best.chat.core.gson.adapter.InstantTypeAdapter;
+
 
 import java.time.Duration;
 import java.time.Instant;
